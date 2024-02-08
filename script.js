@@ -1,7 +1,16 @@
+const Player = (name, mark) => {
+  this.name = name;
+  this.mark = mark;
+
+  const getName = () => name;
+
+  const getMark = () => mark;
+
+  return { getMark, getName };
+};
+
 const GameBoard = () => {
   const _board = new Array(9);
-
-  const getBoard = () => _board;
 
   const setField = (index, mark) => {
     if (index > _board.length) return;
@@ -19,30 +28,67 @@ const GameBoard = () => {
     }
   };
 
-  const printBoard = () => {
-    let string = "";
-    for (let index = 0; index < 9; index++) {
-      if (index % 3 == 0) {
-        string += "\n" + (_board[index] ? _board[index] : "#") + " ";
-      } else {
-        string += (_board[index] ? _board[index] : "#") + " ";
-      }
-    }
-    console.log(string);
-  };
-
-  return { clearBoard, getBoard, getField, printBoard, setField };
+  return { clearBoard, getField, setField };
 };
 
 const gameController = (() => {
-  const playerX = { name: "X-Man", mark: "X" };
-  const playerO = { name: "O-Man", mark: "O" };
+  const playerX = Player("cross", "X");
+  const playerO = Player("circle", "O");
   const gameBoard = GameBoard();
 
-  let activePlayer = playerX;
+  let round = 1;
+  let isGameOver = false;
 
-  const switchPlayerTurn = () =>
-    (activePlayer = activePlayer === playerX ? playerO : playerX);
+  const playRound = (index) => {
+    gameBoard.setField(index, getCurrentPlayer().getMark());
+
+    if (checkForWin(index)) {
+      isGameOver = true;
+      displayController.displayWinner(
+        getCurrentPlayer().getMark(),
+        winningCombination()
+      );
+      return;
+    }
+    if (round === 9) {
+      isGameOver = true;
+      displayController.displayWinner("D");
+      return;
+    }
+
+    ++round;
+    displayController.displayMessage(
+      `<span>${getCurrentPlayer().getMark()}</span><span>TURN</span>`
+    );
+  };
+
+  const getCurrentPlayer = () => (round % 2 === 1 ? playerX : playerO);
+
+  const winningCombination = () => {
+    const winCombinations = [
+      [0, 1, 2],
+      [3, 4, 5],
+      [6, 7, 8],
+      [0, 3, 6],
+      [1, 4, 7],
+      [2, 5, 8],
+      [0, 4, 8],
+      [2, 4, 6],
+    ];
+
+    let result;
+    winCombinations.forEach((combination) => {
+      if (
+        gameBoard.getField(combination[0]) ===
+          gameBoard.getField(combination[1]) &&
+        gameBoard.getField(combination[1]) ===
+          gameBoard.getField(combination[2])
+      ) {
+        result = combination;
+      }
+    });
+    return result;
+  };
 
   const checkForWin = (index) => {
     const winCombinations = [
@@ -60,41 +106,116 @@ const gameController = (() => {
       .filter((combination) => combination.includes(index))
       .some((possibleCombination) =>
         possibleCombination.every(
-          (fieldIndex) => gameBoard.getField(fieldIndex) === activePlayer.mark
+          (fieldIndex) =>
+            gameBoard.getField(fieldIndex) === getCurrentPlayer().getMark()
         )
       );
   };
 
-  const checkForDraw = () => {
-    for (let index = 0; index < 9; index++) {
-      if (gameBoard.getField(index) === undefined) {
-        return false;
-      }
-    }
-    return true;
+  const getIsGameOver = () => isGameOver;
+
+  const resetGame = () => {
+    gameBoard.clearBoard();
+    isGameOver = false;
+    round = 1;
   };
 
-  const playRound = (index) => {
-    gameBoard.setField(index, activePlayer.mark);
-    gameBoard.printBoard();
-    if (checkForWin(index)) {
-      console.log(`${activePlayer.name} WON`);
-      return;
-    }
-    if (checkForDraw()) {
-      console.log("It's a tie!");
-      return;
-    }
-    switchPlayerTurn();
-    consoleGame();
+  return {
+    getCurrentPlayer,
+    getIsGameOver,
+    playRound,
+    resetGame,
+  };
+})();
+
+const displayController = (() => {
+  const fieldElements = document.querySelectorAll(".board-field"),
+    scoreDisplayElements = document.querySelectorAll(".display-score"),
+    restartButton = document.querySelector(".btn-restart"),
+    messageDisplayElement = document.querySelector(".message-display");
+
+  let circleWinCount = 0,
+    crossWinCount = 0,
+    drawGameCount = 0;
+
+  fieldElements.forEach((element) =>
+    element.addEventListener("click", (event) => {
+      const fieldIndex = parseInt(event.target.dataset.index);
+      if (gameController.getIsGameOver() || event.target.innerHTML !== "")
+        return;
+
+      updateBoard(fieldIndex);
+      gameController.playRound(fieldIndex);
+    })
+  );
+
+  const updateBoard = (index) => {
+    const name = gameController.getCurrentPlayer().getName();
+    fieldElements[
+      index
+    ].innerHTML = `<img src='./images/${name}.svg' alt='${name}' />`;
+    fieldElements[index].classList.add("disabled");
   };
 
-  const consoleGame = () => {
-    console.log(`${activePlayer.name}'s Turn`);
-    const fieldIndex = parseInt(prompt("Input the Index:"));
-    playRound(fieldIndex);
+  const displayMessage = (htmlContent) => {
+    messageDisplayElement.innerHTML = htmlContent;
   };
 
-  console.log("Game Start");
-  consoleGame();
+  const displayWinner = (winner, combination) => {
+    switch (winner) {
+      case "D":
+        displayMessage(`<span>DRAW</span>`);
+        updateScore(winner);
+        messageDisplayElement.classList.add("draw");
+        return;
+      case "X":
+        displayMessage(`<span>X</span><span>WON</span>`);
+        combination.forEach((index) =>
+          fieldElements[index].classList.add(`winner-x`)
+        );
+        messageDisplayElement.classList.add("winner-x");
+        updateScore(winner);
+        return;
+      case "O":
+        displayMessage(`<span>O</span><span>WON</span>`);
+        combination.forEach((index) =>
+          fieldElements[index].classList.add(`winner-o`)
+        );
+        messageDisplayElement.classList.add("winner-o");
+        updateScore(winner);
+        return;
+      default:
+        console.error("Invalid Winner: " + winner);
+        return;
+    }
+  };
+
+  const updateScore = (winner) => {
+    switch (winner) {
+      case "D":
+        scoreDisplayElements[1].textContent = ++drawGameCount;
+        return;
+      case "X":
+        scoreDisplayElements[0].textContent = ++crossWinCount;
+        return;
+      case "O":
+        scoreDisplayElements[2].textContent = ++circleWinCount;
+        return;
+      default:
+        console.error("Invalid Winner: " + winner);
+        return;
+    }
+  };
+
+  restartButton.addEventListener("click", () => {
+    gameController.resetGame();
+    fieldElements.forEach((element) => {
+      element.className = "board-field";
+      element.innerHTML = "";
+    });
+    displayMessage("<span>X</span><span>TURN</span>");
+    messageDisplayElement.className = "message-display";
+  });
+
+  return { displayMessage, displayWinner };
 })();
